@@ -4,27 +4,38 @@ import { Navbar } from "@/components/navigation/navbar";
 import { motion } from "framer-motion";
 import { Search, Mail, User } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
+import { useEffect, useState } from "react";
 
-const students = [
-  {
-    id: 1,
-    name: "John Doe",
-    email: "john.doe@example.com",
-    enrolledCourses: 5,
-    certificates: 3,
-    joinDate: "2024-01-15",
-  },
-  {
-    id: 2,
-    name: "Jane Smith",
-    email: "jane.smith@example.com",
-    enrolledCourses: 8,
-    certificates: 6,
-    joinDate: "2024-02-01",
-  },
-];
+type Student = {
+  id: number;
+  name: string;
+  email: string;
+  enrolledCourses: number;
+  certificates: number;
+  joinDate: string;
+};
 
 export default function AdminStudentsPage() {
+  const [students, setStudents] = useState<Student[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [search, setSearch] = useState("");
+
+  useEffect(() => {
+    fetch("/api/students")
+      .then((res) => res.json())
+      .then((data) => {
+        setStudents(Array.isArray(data) ? data : []);
+      })
+      .catch(() => setStudents([]))
+      .finally(() => setLoading(false));
+  }, []);
+
+  const filtered = students.filter(
+    (s) =>
+      s.name.toLowerCase().includes(search.toLowerCase()) ||
+      s.email.toLowerCase().includes(search.toLowerCase())
+  );
+
   return (
     <div className="min-h-screen bg-background-light dark:bg-background-dark">
       <Navbar />
@@ -37,7 +48,10 @@ export default function AdminStudentsPage() {
           <div className="mb-8">
             <h1 className="text-3xl font-bold mb-2">Students Management</h1>
             <p className="text-gray-600 dark:text-gray-300">
-              View and manage all students
+              View and manage all students (from database).{" "}
+              <a href="/admin/database" className="text-primary hover:underline">
+                Link XAMPP/MySQL
+              </a>
             </p>
           </div>
 
@@ -48,6 +62,8 @@ export default function AdminStudentsPage() {
               <input
                 type="text"
                 placeholder="Search students..."
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
                 className={cn(
                   "w-full pl-10 pr-4 py-3 rounded-lg border",
                   "bg-background-light dark:bg-background-dark",
@@ -58,44 +74,58 @@ export default function AdminStudentsPage() {
             </div>
           </div>
 
-          {/* Students Grid */}
-          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {students.map((student, index) => (
-              <motion.div
-                key={student.id}
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.6, delay: index * 0.1 }}
-                className="bg-card-light dark:bg-card-dark rounded-xl p-6 border border-gray-200 dark:border-gray-700 shadow-lg"
-              >
-                <div className="flex items-center mb-4">
-                  <div className="w-12 h-12 bg-primary/10 rounded-full flex items-center justify-center mr-4">
-                    <User className="w-6 h-6 text-primary" />
-                  </div>
-                  <div>
-                    <h3 className="font-semibold">{student.name}</h3>
-                    <div className="flex items-center text-sm text-gray-600 dark:text-gray-300">
-                      <Mail className="w-4 h-4 mr-1" />
-                      {student.email}
+          {loading ? (
+            <p className="text-gray-600 dark:text-gray-300">Loading students...</p>
+          ) : (
+            <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {filtered.map((student, index) => (
+                <motion.div
+                  key={student.id}
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.6, delay: index * 0.05 }}
+                  className="bg-card-light dark:bg-card-dark rounded-xl p-6 border border-gray-200 dark:border-gray-700 shadow-lg"
+                >
+                  <div className="flex items-center mb-4">
+                    <div className="w-12 h-12 bg-primary/10 rounded-full flex items-center justify-center mr-4">
+                      <User className="w-6 h-6 text-primary" />
+                    </div>
+                    <div>
+                      <h3 className="font-semibold">{student.name}</h3>
+                      <div className="flex items-center text-sm text-gray-600 dark:text-gray-300">
+                        <Mail className="w-4 h-4 mr-1" />
+                        {student.email}
+                      </div>
                     </div>
                   </div>
-                </div>
-                <div className="grid grid-cols-2 gap-4 mb-4">
-                  <div>
-                    <p className="text-sm text-gray-600 dark:text-gray-300">Courses</p>
-                    <p className="font-semibold">{student.enrolledCourses}</p>
+                  <div className="grid grid-cols-2 gap-4 mb-4">
+                    <div>
+                      <p className="text-sm text-gray-600 dark:text-gray-300">Courses</p>
+                      <p className="font-semibold">{student.enrolledCourses}</p>
+                    </div>
+                    <div>
+                      <p className="text-sm text-gray-600 dark:text-gray-300">Certificates</p>
+                      <p className="font-semibold">{student.certificates}</p>
+                    </div>
                   </div>
-                  <div>
-                    <p className="text-sm text-gray-600 dark:text-gray-300">Certificates</p>
-                    <p className="font-semibold">{student.certificates}</p>
-                  </div>
-                </div>
-                <button className={cn("w-full px-4 py-2 border border-gray-200 dark:border-gray-700 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800")}>
-                  View Details
-                </button>
-              </motion.div>
-            ))}
-          </div>
+                  <button
+                    className={cn(
+                      "w-full px-4 py-2 border border-gray-200 dark:border-gray-700 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800"
+                    )}
+                  >
+                    View Details
+                  </button>
+                </motion.div>
+              ))}
+            </div>
+          )}
+          {!loading && filtered.length === 0 && (
+            <p className="text-gray-600 dark:text-gray-300">
+              {students.length === 0
+                ? "No students in database. Run: npm run db:push && npm run db:seed"
+                : "No students match your search."}
+            </p>
+          )}
         </motion.div>
       </div>
     </div>

@@ -1,7 +1,7 @@
-"use client";
+\"use client\";
 
 import { motion, AnimatePresence } from "framer-motion";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Clock, CheckCircle, Circle, AlertTriangle, Maximize2 } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
 
@@ -53,12 +53,19 @@ const examData = {
   ],
 };
 
+type FaceStatus = "idle" | "checking" | "verified" | "failed";
+
 export default function ExamPage({ params }: { params: { id: string } }) {
   const [currentQuestion, setCurrentQuestion] = useState(0);
   const [answers, setAnswers] = useState<Record<number, string>>({});
   const [timeRemaining, setTimeRemaining] = useState(examData.duration * 60);
   const [isFullScreen, setIsFullScreen] = useState(false);
   const [showWarning, setShowWarning] = useState(false);
+  const [faceStatus, setFaceStatus] = useState<FaceStatus>("idle");
+
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const verificationIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
     const timer = setInterval(() => {
@@ -73,6 +80,87 @@ export default function ExamPage({ params }: { params: { id: string } }) {
     }, 1000);
 
     return () => clearInterval(timer);
+  }, []);
+
+  // Start webcam and periodically send frames to backend for face verification
+  useEffect(() => {
+    let stream: MediaStream | null = null;
+
+    const startCamera = async () => {
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: "user" },
+        });
+
+        if (videoRef.current) {
+          videoRef.current.srcObject = stream;
+        }
+
+        // Wait a moment for the video to have data, then start periodic verification
+        verificationIntervalRef.current = setInterval(captureAndVerify, 10000);
+      } catch (error) {
+        console.error("Error accessing camera for face verification:", error);
+        setFaceStatus("failed");
+      }
+    };
+
+    const captureAndVerify = async () => {
+      if (!videoRef.current) return;
+
+      const video = videoRef.current;
+
+      if (!canvasRef.current) {
+        canvasRef.current = document.createElement("canvas");
+      }
+
+      const canvas = canvasRef.current;
+      canvas.width = video.videoWidth || 640;
+      canvas.height = video.videoHeight || 480;
+
+      const context = canvas.getContext("2d");
+      if (!context) return;
+
+      context.drawImage(video, 0, 0, canvas.width, canvas.height);
+      const dataUrl = canvas.toDataURL("image/jpeg");
+
+      try {
+        setFaceStatus("checking");
+
+        const response = await fetch("/api/face-verify", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ image: dataUrl }),
+        });
+
+        const result = await response.json();
+
+        if (response.ok && (result?.success ?? result?.verified)) {
+          setFaceStatus("verified");
+        } else {
+          setFaceStatus("failed");
+          if (result?.message && response.status === 503) {
+            console.warn("Face verification:", result.message);
+          }
+        }
+      } catch (error) {
+        console.error("Error calling face verification API:", error);
+        setFaceStatus("failed");
+      }
+    };
+
+    startCamera();
+
+    return () => {
+      if (verificationIntervalRef.current) {
+        clearInterval(verificationIntervalRef.current);
+      }
+
+      if (stream) {
+        stream.getTracks().forEach((track) => track.stop());
+      }
+    };
   }, []);
 
   useEffect(() => {
@@ -113,7 +201,7 @@ export default function ExamPage({ params }: { params: { id: string } }) {
       {/* Header */}
       <div className="sticky top-0 z-50 bg-card-light dark:bg-card-dark border-b border-gray-200 dark:border-gray-700">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
-          <div className="flex items-center justify-between">
+            <div className="flex items-center justify-between">
             <div>
               <h1 className="text-xl font-bold">{examData.title}</h1>
               <p className="text-sm text-gray-600 dark:text-gray-300">
@@ -133,6 +221,21 @@ export default function ExamPage({ params }: { params: { id: string } }) {
               >
                 <Maximize2 className="w-5 h-5" />
               </button>
+              <div
+                className={cn(
+                  "px-3 py-1 rounded-lg text-xs font-semibold border",
+                  faceStatus === "verified" && "border-green-500 text-green-600 bg-green-500/10",
+                  faceStatus === "checking" && "border-yellow-500 text-yellow-600 bg-yellow-500/10",
+                  faceStatus === "failed" && "border-red-500 text-red-600 bg-red-500/10",
+                  faceStatus === "idle" &&
+                    "border-gray-300 text-gray-600 dark:text-gray-300 bg-gray-100 dark:bg-gray-800"
+                )}
+              >
+                {faceStatus === "verified" && "Face verified"}
+                {faceStatus === "checking" && "Checking face..."}
+                {faceStatus === "failed" && "Face not recognized"}
+                {faceStatus === "idle" && "Face verification idle"}
+              </div>
             </div>
           </div>
         </div>
@@ -141,7 +244,24 @@ export default function ExamPage({ params }: { params: { id: string } }) {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="grid lg:grid-cols-4 gap-6">
           {/* Main Question Area */}
-          <div className="lg:col-span-3">
+          <div className="lg:col-span-3 space-y-4">
+            {/* Small live camera preview for proctoring */}
+            <div className="bg-card-light dark:bg-card-dark rounded-xl p-4 border border-gray-200 dark:border-gray-700 flex items-center space-x-4">
+              <div className="w-32 h-24 bg-black rounded-lg overflow-hidden">
+                <video
+                  ref={videoRef}
+                  autoPlay
+                  playsInline
+                  muted
+                  className="w-full h-full object-cover"
+                />
+              </div>
+              <div className="text-sm text-gray-600 dark:text-gray-300">
+                Face verification is running in the background using your camera to ensure
+                the correct person is taking the exam.
+              </div>
+            </div>
+
             <motion.div
               key={currentQuestion}
               initial={{ opacity: 0, x: 20 }}
