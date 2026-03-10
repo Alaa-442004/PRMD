@@ -28,6 +28,8 @@ NMU IntelliLearn Platform is a modern digital learning and examination platform 
 
 - **Framework:** Next.js 14 (App Router)
 - **Language:** TypeScript
+- **Database:** SQL (SQLite via Prisma; switch to PostgreSQL/MySQL in production)
+- **Backend:** Next.js API Routes (no PHP)
 - **Styling:** Tailwind CSS
 - **Animations:** Framer Motion
 - **State Management:** Zustand
@@ -54,12 +56,39 @@ cd prmd
 npm install
 ```
 
-3. Run the development server
+3. Set up the database (SQLite)
+   - Copy `.env.example` to `.env`
+   - Ensure `.env` contains: `DATABASE_URL="file:./dev.db"`
+   - Create DB and tables: `npm run db:push`
+   - Seed sample student data: `npm run db:seed`
+
+4. Run the development server
 ```bash
 npm run dev
 ```
 
-4. Open [http://localhost:3000](http://localhost:3000) in your browser
+5. Open [http://localhost:3000](http://localhost:3000) in your browser
+
+### Database & Chatbot
+
+- **Students** are stored in SQL (Prisma + SQLite). Admin students page loads from `GET /api/students`.
+- **Chatbot**: A floating chat button (bottom-right) opens the IntelliLearn assistant. Messages are saved in the database. By default the bot uses rule-based answers; set `OPENAI_API_KEY` in `.env` to use OpenAI for AI-powered replies.
+
+### Face verification (online exams)
+
+The exam page (`/exam/[id]`) uses your **face recognition Python project** to verify the test-taker during the exam. To enable it:
+
+1. In the face-recognition project folder, install dependencies and run the Flask server:
+   ```bash
+   cd path/to/face-recogantion
+   pip install -r requirements.txt
+   python server.py
+   ```
+2. In this project (PRMD), set in `.env`:
+   ```env
+   FACE_SERVICE_URL=http://127.0.0.1:5000/verify
+   ```
+3. Register a face once using the desktop proctoring app (run `main.py` and complete registration); that creates `encodings/student.pkl` used by the server. Then take an exam in the browser; the page will send camera frames to `/api/face-verify`, which forwards them to the Python service.
 
 ## Project Structure
 
